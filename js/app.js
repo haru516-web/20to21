@@ -314,7 +314,7 @@ function renderThreadPage() {
   function renderInfo() {
     threadInfo.innerHTML = `
       <div class="thread-sticky-bar">
-        <button class="back-button thread-back-button" id="backToThreadsInline" aria-label="Back">Back</button>
+        <button class="back-button thread-back-button" id="backToThreadsInline" aria-label="Back">&#x21A9;</button>
         <div class="thread-info-box">
           <div class="thread-theme">${escapeHtml(thread.theme)}</div>
           ${
