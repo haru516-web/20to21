@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Night Room</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="screen landing-screen">
+    <div class="landing-inner">
+      <div class="landing-top-text">Open from 20:00 to 1:00</div>
+      <div id="countdownText" class="countdown-text" aria-live="polite"></div>
+
+      <div class="hero-image-box">
+        <img
+          src="https://placehold.co/800x450/png"
+          alt="Main visual"
+          class="hero-image"
+        />
+      </div>
+
+      <button id="joinBtn" class="primary-button" disabled>join</button>
+    </div>
+  </main>
+
+  <script>
+    const joinBtn = document.getElementById("joinBtn");
+    const countdownText = document.getElementById("countdownText");
+    const FORCE_OPEN = true;
+    const CLOSE_HOUR = 14;
+    const CLOSE_MINUTE = 36;
+
+    function getTokyoParts(date) {
+      const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Tokyo",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23"
+      });
+
+      const parts = formatter.formatToParts(date);
+      const map = {};
+      parts.forEach(part => {
+        if (part.type !== "literal") {
+          map[part.type] = part.value;
+        }
+      });
+      return map;
+    }
+
+    function getTokyoTime(now) {
+      const tokyo = getTokyoParts(now);
+      return {
+        hour: Number(tokyo.hour),
+        minute: Number(tokyo.minute)
+      };
+    }
+
+    function getNextTokyoOpenTime(now) {
+      const tokyo = getTokyoParts(now);
+      const tokyoNowUtc = Date.UTC(
+        Number(tokyo.year),
+        Number(tokyo.month) - 1,
+        Number(tokyo.day),
+        Number(tokyo.hour) - 9,
+        Number(tokyo.minute),
+        Number(tokyo.second)
+      );
+
+      const openUtc = Date.UTC(
+        Number(tokyo.year),
+        Number(tokyo.month) - 1,
+        Number(tokyo.day),
+        11,
+        0,
+        0
+      );
+
+      return {
+        tokyoHour: Number(tokyo.hour),
+        diffMs: openUtc - tokyoNowUtc
+      };
+    }
+
+    function formatCountdown(diffMs) {
+      const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
+      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      return `${hours}:${minutes}:${seconds}`;
+    }
+
+    function updateJoinState() {
+      if (FORCE_OPEN) {
+        joinBtn.disabled = false;
+        countdownText.textContent = "Now open";
+        return;
+      }
+
+      const now = new Date();
+      const tokyoTime = getTokyoTime(now);
+      const currentMinutes = tokyoTime.hour * 60 + tokyoTime.minute;
+      const closeMinutes = CLOSE_HOUR * 60 + CLOSE_MINUTE;
+      const isClosed = currentMinutes >= closeMinutes;
+
+      if (isClosed) {
+        joinBtn.disabled = true;
+        countdownText.textContent = "Closed at 14:36";
+        return;
+      }
+
+      const schedule = getNextTokyoOpenTime(now);
+      const isOpen = schedule.tokyoHour >= 20;
+
+      joinBtn.disabled = !isOpen;
+
+      if (isOpen) {
+        countdownText.textContent = "Now open";
+      } else {
+        countdownText.textContent = `Until open ${formatCountdown(schedule.diffMs)}`;
+      }
+    }
+
+    joinBtn.addEventListener("click", () => {
+      if (!joinBtn.disabled) {
+        window.location.href = "threads.html";
+      }
+    });
+
+    updateJoinState();
+    setInterval(updateJoinState, 1000);
+  </script>
+</body>
+</html>
