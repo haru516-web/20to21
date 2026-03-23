@@ -15,7 +15,25 @@
 
       <div class="hero-title-box" aria-label="Site title">
         <div class="hero-kicker">limited</div>
-        <div class="hero-title">20to21</div>
+        <div class="hero-title" aria-label="20to21">
+          <span class="hero-char" style="--char-delay: 2.34s; --char-duration: 2.85s;">2</span>
+          <span class="hero-char" style="--char-delay: 1.57s; --char-duration: 2.18s;">0</span>
+          <span class="hero-char" style="--char-delay: 1.08s; --char-duration: 2.62s;">t</span>
+          <span class="hero-char" style="--char-delay: 0.61s; --char-duration: 2.04s;">o</span>
+          <span class="hero-char" style="--char-delay: 0.27s; --char-duration: 2.46s;">2</span>
+          <span class="hero-char" style="--char-delay: 0s; --char-duration: 2.26s;">1</span>
+        </div>
+      </div>
+
+      <div class="hero-character-row" aria-hidden="true">
+        <img
+          src="assets/images/ヒツジモビー.png"
+          alt=""
+          class="hero-character"
+          id="heroCharacter"
+          data-side="center"
+        />
+        <div class="hero-character-burst" id="heroCharacterBurst" data-side="center"></div>
       </div>
 
       <button id="joinBtn" class="primary-button" disabled>join</button>
@@ -25,9 +43,12 @@
   <script>
     const joinBtn = document.getElementById("joinBtn");
     const countdownText = document.getElementById("countdownText");
+    const heroCharacter = document.getElementById("heroCharacter");
+    const heroCharacterBurst = document.getElementById("heroCharacterBurst");
     const FORCE_OPEN = true;
     const CLOSE_HOUR = 14;
     const CLOSE_MINUTE = 36;
+    let characterSide = "center";
 
     function getTokyoParts(date) {
       const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -129,6 +150,38 @@
         window.location.href = "threads.html";
       }
     });
+
+    if (heroCharacter && heroCharacterBurst) {
+      const moveCharacter = event => {
+        if (event) {
+          event.preventDefault();
+        }
+
+        characterSide = characterSide === "left" ? "right" : "left";
+        heroCharacter.dataset.side = characterSide;
+        heroCharacterBurst.dataset.side = characterSide;
+
+        heroCharacter.classList.remove("is-running");
+        heroCharacterBurst.classList.remove("is-bursting");
+
+        void heroCharacter.offsetWidth;
+
+        heroCharacter.classList.add("is-running");
+        heroCharacterBurst.classList.add("is-bursting");
+      };
+
+      heroCharacter.addEventListener("pointerdown", moveCharacter);
+
+      heroCharacter.addEventListener("animationend", event => {
+        if (event.animationName === "hero-character-hop") {
+          heroCharacter.classList.remove("is-running");
+        }
+      });
+
+      heroCharacterBurst.addEventListener("animationend", () => {
+        heroCharacterBurst.classList.remove("is-bursting");
+      });
+    }
 
     updateJoinState();
     setInterval(updateJoinState, 1000);
