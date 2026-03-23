@@ -75,25 +75,37 @@ body {
   flex-direction: column;
   gap: 10px;
   padding: 24px;
+  text-align: center;
 }
 
 .hero-kicker {
+  display: block;
+  width: 100%;
   font-size: 16px;
   line-height: 1;
   font-weight: 700;
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--text-soft);
+  text-align: center;
 }
 
 .hero-title {
-  font-size: clamp(48px, 16vw, 88px);
+  display: block;
+  width: 100%;
+  font-size: 72px;
   line-height: 1;
   font-weight: 900;
   letter-spacing: 0.08em;
   color: #f3faf5;
   text-align: center;
   text-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+
+@media (max-width: 430px) {
+  .hero-title {
+    font-size: 56px;
+  }
 }
 
 .primary-button,
