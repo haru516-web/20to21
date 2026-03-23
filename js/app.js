@@ -1,8 +1,19 @@
-const STORAGE_KEY = "night_threads_data_v1";
+import { db } from "./firebase.js";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
 const MAX_THREADS = 10;
-const CLOSE_HOUR = 14;
-const CLOSE_MINUTE = 36;
-const FORCE_OPEN = true;
+const CLOSE_HOUR = 21;
+const CLOSE_MINUTE = 0;
+const FORCE_OPEN = false;
 
 function getTokyoTime(now = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -55,42 +66,6 @@ function enforceClosingRedirect() {
   }, 1000);
 }
 
-function createEmptyThread() {
-  return {
-    id: generateId(),
-    theme: "",
-    link: "",
-    messages: [],
-    createdAt: null
-  };
-}
-
-function loadThreads() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    const initial = [createEmptyThread()];
-    saveThreads(initial);
-    return initial;
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [createEmptyThread()];
-  } catch (error) {
-    const fallback = [createEmptyThread()];
-    saveThreads(fallback);
-    return fallback;
-  }
-}
-
-function saveThreads(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
-function generateId() {
-  return "id_" + Date.now() + "_" + Math.random().toString(16).slice(2);
-}
-
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -106,86 +81,89 @@ function normalizeLink(link) {
   return "https://" + link.trim();
 }
 
-function formatTime(dateString) {
-  const d = new Date(dateString);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
+function formatTime(value) {
+  if (!value) return "";
+
+  const date = typeof value.toDate === "function"
+    ? value.toDate()
+    : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const h = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
   return `${y}/${m}/${day} ${h}:${min}`;
 }
 
-function ensureThreadSlots(threads) {
-  const activeThreads = threads
-    .filter(thread => thread.theme.trim() !== "")
-    .slice(0, MAX_THREADS);
-  const emptyThread = threads.find(thread => thread.theme.trim() === "");
-
-  if (activeThreads.length < MAX_THREADS) {
-    activeThreads.push(emptyThread || createEmptyThread());
-  }
-
-  return activeThreads;
+function mapThreadDoc(snapshot) {
+  const data = snapshot.data();
+  return {
+    id: snapshot.id,
+    theme: data.theme || "",
+    link: data.link || "",
+    createdAt: data.createdAt || null
+  };
 }
 
 function renderThreadsPage() {
   const backToTop = document.getElementById("backToTop");
   const threadList = document.getElementById("threadList");
 
-  if (!threadList) return;
+  if (!threadList || !backToTop) return;
 
   enforceClosingRedirect();
 
+  let threads = [];
   let composingThreadId = null;
 
   function render() {
-    const threads = ensureThreadSlots(loadThreads());
-    saveThreads(threads);
-
+    const canCreateMore = threads.length < MAX_THREADS;
     threadList.innerHTML = "";
 
     threads.forEach(thread => {
-      const isEmpty = thread.theme.trim() === "";
-      const isOpen = isEmpty && composingThreadId === thread.id;
       const card = document.createElement("article");
-      card.className = isEmpty ? "thread-card empty" : "thread-card";
-
-      if (isOpen) {
-        card.classList.add("is-composer-open");
-      }
-
-      if (isEmpty) {
-        card.innerHTML = `
-          <div class="empty-inner">
-            <button class="plus-button" type="button" data-thread-id="${thread.id}" aria-label="Create thread">+</button>
-            <div class="empty-text">Tap plus to create a thread</div>
-          </div>
-        `;
-      } else {
-        card.innerHTML = `
-          <div class="thread-title">${escapeHtml(thread.theme)}</div>
-          ${
-            thread.link
-              ? `<a class="thread-link" href="${escapeHtml(thread.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(thread.link)}</a>`
-              : ""
-          }
-          <div class="thread-actions">
-            <button class="join-button" type="button" data-thread-id="${thread.id}">Open</button>
-          </div>
-        `;
-      }
-
+      card.className = "thread-card";
+      card.innerHTML = `
+        <div class="thread-title">${escapeHtml(thread.theme)}</div>
+        ${
+          thread.link
+            ? `<a class="thread-link" href="${escapeHtml(thread.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(thread.link)}</a>`
+            : ""
+        }
+        <div class="thread-actions">
+          <button class="join-button" type="button" data-thread-id="${thread.id}">Open</button>
+        </div>
+      `;
       threadList.appendChild(card);
+    });
 
-      if (isOpen) {
+    if (canCreateMore) {
+      const emptyCard = document.createElement("article");
+      emptyCard.className = "thread-card empty";
+      if (composingThreadId) {
+        emptyCard.classList.add("is-composer-open");
+      }
+      emptyCard.innerHTML = `
+        <div class="empty-inner">
+          <button class="plus-button" type="button" aria-label="Create thread">+</button>
+          <div class="empty-text">Tap plus to create a thread</div>
+        </div>
+      `;
+      threadList.appendChild(emptyCard);
+
+      if (composingThreadId) {
         const composerCard = document.createElement("article");
         composerCard.className = "thread-card composer-panel";
         composerCard.innerHTML = `
           <div class="composer">
             <div class="composer-head">
               <div class="composer-title">New thread</div>
-              <button class="close-composer-button" type="button" data-thread-id="${thread.id}" aria-label="Close">x</button>
+              <button class="close-composer-button" type="button" aria-label="Close">x</button>
             </div>
             <label class="form-label" for="threadThemeInput">Theme</label>
             <input
@@ -207,29 +185,29 @@ function renderThreadsPage() {
         `;
         threadList.appendChild(composerCard);
       }
-    });
-
-    threadList.querySelectorAll(".plus-button").forEach(button => {
-      button.addEventListener("click", () => {
-        composingThreadId = button.dataset.threadId;
-        render();
-      });
-    });
-
-    threadList.querySelectorAll(".close-composer-button").forEach(button => {
-      button.addEventListener("click", () => {
-        if (composingThreadId === button.dataset.threadId) {
-          composingThreadId = null;
-          render();
-        }
-      });
-    });
+    }
 
     threadList.querySelectorAll(".join-button").forEach(button => {
       button.addEventListener("click", () => {
         window.location.href = `thread.html?id=${encodeURIComponent(button.dataset.threadId)}`;
       });
     });
+
+    const plusButton = threadList.querySelector(".plus-button");
+    if (plusButton) {
+      plusButton.addEventListener("click", () => {
+        composingThreadId = "new-thread-slot";
+        render();
+      });
+    }
+
+    const closeButton = threadList.querySelector(".close-composer-button");
+    if (closeButton) {
+      closeButton.addEventListener("click", () => {
+        composingThreadId = null;
+        render();
+      });
+    }
 
     const themeInput = document.getElementById("threadThemeInput");
     const linkInput = document.getElementById("threadLinkInput");
@@ -249,47 +227,52 @@ function renderThreadsPage() {
       syncSubmitState();
       themeInput.focus();
 
-      createThreadBtn.addEventListener("click", () => {
+      createThreadBtn.addEventListener("click", async () => {
         const theme = themeInput.value.trim();
         const link = normalizeLink(linkInput ? linkInput.value : "");
 
-        if (!theme || !composingThreadId) {
+        if (!theme) {
           return;
         }
 
-        const latestThreads = loadThreads();
-        const activeCount = latestThreads.filter(thread => thread.theme.trim() !== "").length;
-        if (activeCount >= MAX_THREADS) {
+        if (threads.length >= MAX_THREADS) {
           alert("You can create up to 10 threads.");
           composingThreadId = null;
           render();
           return;
         }
 
-        const target = latestThreads.find(thread => thread.id === composingThreadId);
-        if (!target) {
-          return;
-        }
+        createThreadBtn.disabled = true;
 
-        target.theme = theme;
-        target.link = link;
-        target.createdAt = new Date().toISOString();
-        target.messages = [];
-        saveThreads(ensureThreadSlots(latestThreads));
-        composingThreadId = null;
-        render();
+        try {
+          await addDoc(collection(db, "threads"), {
+            theme,
+            link,
+            createdAt: serverTimestamp()
+          });
+          composingThreadId = null;
+        } catch (error) {
+          alert("Thread creation failed.");
+          createThreadBtn.disabled = false;
+        }
       });
     }
   }
 
+  const threadQuery = query(collection(db, "threads"), orderBy("createdAt", "asc"));
+  onSnapshot(threadQuery, snapshot => {
+    threads = snapshot.docs.map(mapThreadDoc).slice(0, MAX_THREADS);
+    render();
+  }, () => {
+    threadList.innerHTML = `<div class="message-item">Failed to load threads.</div>`;
+  });
+
   backToTop.addEventListener("click", () => {
     window.location.href = "index.html";
   });
-
-  render();
 }
 
-function renderThreadPage() {
+async function renderThreadPage() {
   const threadInfo = document.getElementById("threadInfo");
   const messageList = document.getElementById("messageList");
   const messageInput = document.getElementById("messageInput");
@@ -302,16 +285,21 @@ function renderThreadPage() {
   const params = new URLSearchParams(window.location.search);
   const threadId = params.get("id");
 
-  let threads = loadThreads();
-  let thread = threads.find(item => item.id === threadId);
+  if (!threadId) {
+    window.location.href = "threads.html";
+    return;
+  }
 
-  if (!thread || !thread.theme.trim()) {
+  const threadRef = doc(db, "threads", threadId);
+  const threadSnapshot = await getDoc(threadRef);
+
+  if (!threadSnapshot.exists()) {
     alert("Thread not found.");
     window.location.href = "threads.html";
     return;
   }
 
-  function renderInfo() {
+  function renderInfo(thread) {
     threadInfo.innerHTML = `
       <div class="thread-sticky-bar">
         <button class="back-button thread-back-button" id="backToThreadsInline" aria-label="Back">&#x21A9;</button>
@@ -334,50 +322,56 @@ function renderThreadPage() {
     }
   }
 
-  function renderMessages() {
-    threads = loadThreads();
-    thread = threads.find(item => item.id === threadId);
-
-    if (!thread) {
+  onSnapshot(threadRef, snapshot => {
+    if (!snapshot.exists()) {
+      alert("Thread not found.");
+      window.location.href = "threads.html";
       return;
     }
+    renderInfo(mapThreadDoc(snapshot));
+  });
 
+  const messagesQuery = query(collection(db, "threads", threadId, "messages"), orderBy("createdAt", "asc"));
+  onSnapshot(messagesQuery, snapshot => {
     messageList.innerHTML = "";
 
-    if (!thread.messages.length) {
+    if (!snapshot.docs.length) {
       messageList.innerHTML = `<div class="message-item">No comments yet.</div>`;
       return;
     }
 
-    thread.messages.forEach(message => {
+    snapshot.docs.forEach(messageSnapshot => {
+      const message = messageSnapshot.data();
       const item = document.createElement("div");
       item.className = "message-item";
       item.innerHTML = `
-        <div>${escapeHtml(message.text)}</div>
+        <div>${escapeHtml(message.text || "")}</div>
         <div class="message-time">${formatTime(message.createdAt)}</div>
       `;
       messageList.appendChild(item);
     });
-  }
+  }, () => {
+    messageList.innerHTML = `<div class="message-item">Failed to load comments.</div>`;
+  });
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = messageInput.value.trim();
     if (!text) return;
 
-    threads = loadThreads();
-    const target = threads.find(item => item.id === threadId);
-    if (!target) return;
+    sendMessageBtn.disabled = true;
 
-    target.messages.push({
-      id: generateId(),
-      text,
-      createdAt: new Date().toISOString()
-    });
-
-    saveThreads(threads);
-    messageInput.value = "";
-    renderMessages();
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    try {
+      await addDoc(collection(db, "threads", threadId, "messages"), {
+        text,
+        createdAt: serverTimestamp()
+      });
+      messageInput.value = "";
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    } catch (error) {
+      alert("Comment send failed.");
+    } finally {
+      sendMessageBtn.disabled = false;
+    }
   }
 
   sendMessageBtn.addEventListener("click", sendMessage);
@@ -386,8 +380,6 @@ function renderThreadPage() {
       sendMessage();
     }
   });
-  renderInfo();
-  renderMessages();
 }
 
 document.addEventListener("DOMContentLoaded", () => {

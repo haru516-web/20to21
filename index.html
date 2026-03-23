@@ -45,9 +45,9 @@
     const countdownText = document.getElementById("countdownText");
     const heroCharacter = document.getElementById("heroCharacter");
     const heroCharacterBurst = document.getElementById("heroCharacterBurst");
-    const FORCE_OPEN = true;
-    const CLOSE_HOUR = 14;
-    const CLOSE_MINUTE = 36;
+    const FORCE_OPEN = false;
+    const CLOSE_HOUR = 21;
+    const CLOSE_MINUTE = 0;
     let characterSide = "center";
 
     function getTokyoParts(date) {
@@ -129,7 +129,7 @@
 
       if (isClosed) {
         joinBtn.disabled = true;
-        countdownText.textContent = "Closed at 14:36";
+        countdownText.textContent = "Closed at 21:00";
         return;
       }
 

@@ -61,9 +61,10 @@ body {
 
 .countdown-text {
   text-align: center;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 800;
-  color: var(--primary-strong);
+  color: #f3d56b;
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
 
 .hero-title-box {
