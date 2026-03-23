@@ -277,6 +277,7 @@ async function renderThreadPage() {
   const messageList = document.getElementById("messageList");
   const messageInput = document.getElementById("messageInput");
   const sendMessageBtn = document.getElementById("sendMessageBtn");
+  const messageInputBar = document.querySelector(".message-input-bar");
 
   if (!threadInfo || !messageList || !messageInput || !sendMessageBtn) return;
 
@@ -292,6 +293,7 @@ async function renderThreadPage() {
 
   const threadRef = doc(db, "threads", threadId);
   const threadSnapshot = await getDoc(threadRef);
+  let lastMessageCount = 0;
 
   if (!threadSnapshot.exists()) {
     alert("Thread not found.");
@@ -322,6 +324,21 @@ async function renderThreadPage() {
     }
   }
 
+  function scrollLatestMessageIntoView() {
+    const latestMessage = messageList.lastElementChild;
+    if (!latestMessage) {
+      return;
+    }
+
+    const inputBarHeight = messageInputBar ? messageInputBar.getBoundingClientRect().height : 0;
+    const latestRect = latestMessage.getBoundingClientRect();
+    const absoluteBottom = latestRect.bottom + window.scrollY;
+    const visibleHeight = window.innerHeight - inputBarHeight - 12;
+    const targetScrollTop = Math.max(0, absoluteBottom - visibleHeight);
+
+    window.scrollTo({ top: targetScrollTop, behavior: "smooth" });
+  }
+
   onSnapshot(threadRef, snapshot => {
     if (!snapshot.exists()) {
       alert("Thread not found.");
@@ -333,6 +350,9 @@ async function renderThreadPage() {
 
   const messagesQuery = query(collection(db, "threads", threadId, "messages"), orderBy("createdAt", "asc"));
   onSnapshot(messagesQuery, snapshot => {
+    const previousMessageCount = lastMessageCount;
+    lastMessageCount = snapshot.docs.length;
+
     messageList.innerHTML = "";
 
     if (!snapshot.docs.length) {
@@ -350,6 +370,13 @@ async function renderThreadPage() {
       `;
       messageList.appendChild(item);
     });
+
+    if (snapshot.docs.length > previousMessageCount) {
+      requestAnimationFrame(() => {
+        scrollLatestMessageIntoView();
+        setTimeout(scrollLatestMessageIntoView, 120);
+      });
+    }
   }, () => {
     messageList.innerHTML = `<div class="message-item">Failed to load comments.</div>`;
   });
@@ -366,7 +393,6 @@ async function renderThreadPage() {
         createdAt: serverTimestamp()
       });
       messageInput.value = "";
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     } catch (error) {
       alert("Comment send failed.");
     } finally {
